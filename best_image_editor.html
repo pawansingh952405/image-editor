@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Image Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+
+    <style>
+        .preview-wrapper {
+            width: 4in;
+            height: 4in;
+            border: 2px dashed #94a3b8;
+            background-color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .preview-wrapper img {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen p-8">
+
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row gap-8">
+        
+        <div class="w-full md:w-1/2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-slate-700">Image Editor Studio</h1>
+                <button id="undoBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded shadow transition disabled:opacity-50 text-sm font-bold flex items-center gap-2" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                    Undo Edit
+                </button>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-semibold mb-2">1. Upload Image</label>
+                <input type="file" id="imageUpload" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition">
+            </div>
+
+            <hr class="my-4 border-slate-200">
+
+            <div class="mb-6" id="cropSection">
+                <label class="block text-sm font-semibold mb-2">2. Set Exact Crop Dimensions</label>
+                <div class="flex gap-2 mb-3">
+                    <input type="number" id="cropWidth" placeholder="Width" class="w-1/3 p-2 border rounded text-sm outline-none">
+                    <input type="number" id="cropHeight" placeholder="Height" class="w-1/3 p-2 border rounded text-sm outline-none">
+                    <select id="cropUnit" class="w-1/3 p-2 border rounded text-sm outline-none">
+                        <option value="px">Pixels (px)</option>
+                        <option value="in">Inches (in)</option>
+                        <option value="cm">Centimeters (cm)</option>
+                    </select>
+                </div>
+                <div class="flex gap-2">
+                    <button id="initCropBtn" class="flex-1 bg-slate-800 text-white py-2 rounded shadow hover:bg-slate-700 transition text-sm font-medium">Initialize Crop Box</button>
+                    <button id="applyCropBtn" class="flex-1 bg-green-500 text-white py-2 rounded shadow hover:bg-green-600 transition disabled:opacity-50 text-sm font-medium" disabled>Confirm & Crop</button>
+                </div>
+            </div>
+
+            <hr class="my-4 border-slate-200">
+
+            <div class="mb-6">
+                <label class="block text-sm font-semibold mb-2">3. Background Wall Color (Smart Body Detection)</label>
+                <div class="flex gap-4 items-center mb-3">
+                    <input type="color" id="newBgColor" value="#ffffff" class="w-12 h-10 rounded cursor-pointer border-0 p-0">
+                    <button id="applyBgBtn" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50">
+                        Apply Background Color
+                    </button>
+                </div>
+            </div>
+
+            <hr class="my-4 border-slate-200">
+
+            <div class="mb-2">
+                <label class="block text-sm font-semibold mb-2">4. Auto File Size Reducer</label>
+                <div class="flex gap-2 mb-4">
+                    <input type="number" id="targetKB" placeholder="Target size (e.g., 50)" class="flex-1 p-2 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-400">
+                    <span class="p-2 text-sm text-slate-500 bg-slate-100 rounded border font-semibold">Max KB</span>
+                </div>
+                
+                <label class="block text-sm font-semibold mb-2">5. Download File Name</label>
+                <input type="text" id="filenameInput" placeholder="my_passport_photo" class="w-full p-2 border rounded text-sm mb-4 outline-none focus:ring-2 focus:ring-blue-400">
+                
+                <button id="downloadBtn" class="w-full bg-indigo-600 text-white py-3 rounded shadow hover:bg-indigo-700 transition text-sm font-bold uppercase tracking-wide flex justify-center items-center gap-2">
+                    <span id="downloadText">Download Edited Image</span>
+                    <div id="downloadSpinner" class="loader hidden" style="width: 20px; height: 20px; border-width: 3px; border-top-color: white;"></div>
+                </button>
+            </div>
+        </div>
+
+        <div class="w-full md:w-1/2 flex flex-col items-center">
+            <h2 class="text-lg font-semibold mb-4 text-slate-600">Live Preview</h2>
+            <div class="preview-wrapper shadow-inner" id="previewContainer">
+                <span id="placeholderText" class="text-slate-400 text-sm absolute z-10">Upload an image to begin</span>
+                
+                <img id="mainImage" src="" alt="Preview" style="display: none;" crossorigin="anonymous">
+                
+                <div id="loadingOverlay" class="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-50 hidden">
+                    <div class="loader mb-2"></div>
+                    <span class="text-sm font-semibold text-blue-600">Processing AI...</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // DOM Elements
+        const imageUpload = document.getElementById('imageUpload');
+        const mainImage = document.getElementById('mainImage');
+        const placeholderText = document.getElementById('placeholderText');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        
+        const cropWidth = document.getElementById('cropWidth');
+        const cropHeight = document.getElementById('cropHeight');
+        const initCropBtn = document.getElementById('initCropBtn');
+        const applyCropBtn = document.getElementById('applyCropBtn');
+        
+        const applyBgBtn = document.getElementById('applyBgBtn');
+        const newBgColor = document.getElementById('newBgColor');
+        
+        const targetKBInput = document.getElementById('targetKB');
+        const filenameInput = document.getElementById('filenameInput');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const downloadText = document.getElementById('downloadText');
+        const downloadSpinner = document.getElementById('downloadSpinner');
+        const undoBtn = document.getElementById('undoBtn');
+
+        let cropper = null;
+        
+        // --- UNDO STATE MANAGEMENT ---
+        let imageHistory = [];
+        const MAX_HISTORY = 10;
+
+        function saveState() {
+            if (mainImage.src && mainImage.src !== window.location.href) {
+                imageHistory.push(mainImage.src);
+                if (imageHistory.length > MAX_HISTORY) imageHistory.shift();
+                undoBtn.disabled = false;
+            }
+        }
+
+        undoBtn.addEventListener('click', () => {
+            if (imageHistory.length > 0) {
+                if (cropper) { cropper.destroy(); cropper = null; applyCropBtn.disabled = true; }
+                mainImage.src = imageHistory.pop();
+                if (imageHistory.length === 0) undoBtn.disabled = true;
+            }
+        });
+
+        // --- 1. INITIALIZE MEDIAPIPE BODY DETECTION ---
+        const selfieSegmentation = new SelfieSegmentation({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+        });
+        selfieSegmentation.setOptions({ modelSelection: 0 });
+
+        selfieSegmentation.onResults((results) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = results.image.width;
+            canvas.height = results.image.height;
+            const ctx = canvas.getContext('2d');
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'source-in';
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'destination-over';
+            ctx.fillStyle = newBgColor.value;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            mainImage.src = canvas.toDataURL('image/png');
+            loadingOverlay.classList.add('hidden');
+            applyBgBtn.disabled = false;
+        });
+
+        // --- 2. UPLOAD LOGIC ---
+        imageUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    mainImage.src = event.target.result;
+                    mainImage.style.display = 'block';
+                    placeholderText.style.display = 'none';
+                    imageHistory = [];
+                    undoBtn.disabled = true;
+                    if (cropper) { cropper.destroy(); cropper = null; applyCropBtn.disabled = true; }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // --- 3. CROP LOGIC ---
+        initCropBtn.addEventListener('click', () => {
+            if (!mainImage.src || mainImage.src === window.location.href) return alert("Upload an image first.");
+            const w = parseFloat(cropWidth.value);
+            const h = parseFloat(cropHeight.value);
+            if (!w || !h) return alert("Enter width and height.");
+
+            if (cropper) cropper.destroy();
+
+            cropper = new Cropper(mainImage, {
+                aspectRatio: w / h,
+                viewMode: 1,
+                autoCropArea: 0.8,
+                ready: function () { applyCropBtn.disabled = false; }
+            });
+        });
+
+        applyCropBtn.addEventListener('click', () => {
+            if (!cropper) return;
+            saveState();
+            
+            const w = parseFloat(cropWidth.value);
+            const h = parseFloat(cropHeight.value);
+            const unit = document.getElementById('cropUnit').value;
+            const DPI = 300;
+
+            let targetWidthPx = unit === 'px' ? w : unit === 'in' ? w * DPI : (w / 2.54) * DPI;
+            let targetHeightPx = unit === 'px' ? h : unit === 'in' ? h * DPI : (h / 2.54) * DPI;
+
+            const canvas = cropper.getCroppedCanvas({
+                width: targetWidthPx,
+                height: targetHeightPx,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high',
+            });
+            
+            mainImage.src = canvas.toDataURL('image/png');
+            cropper.destroy();
+            cropper = null;
+            applyCropBtn.disabled = true;
+        });
+
+        // --- 4. APPLY BACKGROUND LOGIC ---
+        applyBgBtn.addEventListener('click', async () => {
+            if (!mainImage.src || mainImage.src === window.location.href) return alert("No image available.");
+            saveState();
+            loadingOverlay.classList.remove('hidden');
+            applyBgBtn.disabled = true;
+            await selfieSegmentation.send({ image: mainImage });
+        });
+
+        // --- Helper: Approximate DataURL size in KB ---
+        function getFileSizeKB(dataUrl) {
+            // Remove the base64 header (e.g. "data:image/jpeg;base64,")
+            const base64str = dataUrl.split(',')[1];
+            // Calculate bytes and convert to KB
+            const bytes = Math.round((base64str.length * 3 / 4) - (base64str.match(/==?$/) ? base64str.match(/==?$/)[0].length : 0));
+            return bytes / 1024;
+        }
+
+        // --- 5. BINARY SEARCH DOWNLOAD LOGIC ---
+        downloadBtn.addEventListener('click', async () => {
+            if (!mainImage.src || mainImage.src === window.location.href) return alert("No image to download.");
+            
+            const targetKB = parseFloat(targetKBInput.value);
+            if (targetKB && targetKB <= 0) return alert("Target KB must be greater than 0");
+
+            // UI Update: Show compressing state
+            downloadBtn.disabled = true;
+            downloadText.textContent = "Compressing...";
+            downloadSpinner.classList.remove('hidden');
+
+            // Brief pause to allow UI to update before heavy processing
+            await new Promise(resolve => setTimeout(resolve, 50)); 
+
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+
+                let finalDataUrl;
+
+                if (!targetKB) {
+                    // If user left target KB blank, just export high quality
+                    finalDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                } else {
+                    // Binary search for perfect quality
+                    let minQ = 0.01;
+                    let maxQ = 1.0;
+                    let bestQ = 1.0;
+                    let bestDataUrl = canvas.toDataURL('image/jpeg', 1.0);
+                    
+                    // If highest quality is already under target, skip search
+                    if (getFileSizeKB(bestDataUrl) <= targetKB) {
+                        finalDataUrl = bestDataUrl;
+                    } else {
+                        // Loop to find the sweet spot
+                        for (let i = 0; i < 10; i++) {
+                            let currentQ = (minQ + maxQ) / 2;
+                            let currentDataUrl = canvas.toDataURL('image/jpeg', currentQ);
+                            let currentSize = getFileSizeKB(currentDataUrl);
+
+                            if (currentSize <= targetKB) {
+                                bestQ = currentQ;
+                                bestDataUrl = currentDataUrl;
+                                minQ = currentQ; // try to squeeze a bit more quality
+                            } else {
+                                maxQ = currentQ; // need to drop quality further
+                            }
+                        }
+                        finalDataUrl = bestDataUrl;
+                        
+                        // Edge case warning
+                        if (getFileSizeKB(finalDataUrl) > targetKB) {
+                            alert(`Warning: The lowest possible quality is still ${getFileSizeKB(finalDataUrl).toFixed(1)} KB. You may need to crop the image smaller to hit your exact target.`);
+                        }
+                    }
+                }
+
+                // Trigger Download
+                const link = document.createElement('a');
+                let fileName = filenameInput.value.trim() || "edited_image";
+                link.download = fileName + '.jpg';
+                link.href = finalDataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                // Restore UI
+                downloadBtn.disabled = false;
+                downloadText.textContent = "Download Edited Image";
+                downloadSpinner.classList.add('hidden');
+            };
+            img.src = mainImage.src;
+        });
+    </script>
+</body>
+</html>
